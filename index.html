@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Zebra USB Print Terminal</title>
+  <style>
+    body { font-family: sans-serif; padding: 30px; text-align: center; background: #f4f6f9; color: #333; }
+    .box { border: 2px dashed #6f42c1; padding: 30px; background: white; display: inline-block; border-radius: 8px; margin-top: 50px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    button { padding: 12px 24px; font-size: 16px; background: #6f42c1; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    button:active { background: #5a32a3; }
+    #status { font-weight: bold; margin-top: 15px; color: #666; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+  <div class="box">
+    <h2>Zebra USB Print Terminal</h2>
+    <p>Keep this tab open in the background to handle printing from your scanner app.</p>
+    <button id="connectBtn">🔌 Connect Physical Zebra Printer</button>
+    <p id="status">Status: Disconnected</p>
+  </div>
+
+  <script>
+    let zebraDevice = null;
+
+    // 1. Establish the direct top-level USB hardware connection
+    document.getElementById('connectBtn').addEventListener('click', async () => {
+      try {
+        zebraDevice = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x0A5F }] });
+        await zebraDevice.open();
+        await zebraDevice.selectConfiguration(1);
+        await zebraDevice.claimInterface(0);
+        
+        document.getElementById('status').innerText = "Status: Connected to " + (zebraDevice.productName || "Zebra");
+        document.getElementById('status').style.color = "green";
+      } catch (error) {
+        document.getElementById('status').innerText = "Connection Failed: " + error.message;
+        document.getElementById('status').style.color = "red";
+        zebraDevice = null;
+      }
+    });
+
+    // 2. Listen for print commands from your Google Apps Script App tab
+    window.addEventListener('message', async (event) => {
+      if (!zebraDevice) return;
+      
+      if (event.data && event.data.type === 'ZEBRA_PRINT_JOB') {
+        const encoder = new TextEncoder();
+        const rawBytes = encoder.encode(event.data.zpl);
+        
+        try {
+          await zebraDevice.transferOut(1, rawBytes);
+          console.log("Label successfully sent to hardware line.");
+        } catch (printError) {
+          console.error("Hardware transmission error: ", printError);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
