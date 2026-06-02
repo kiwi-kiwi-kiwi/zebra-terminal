@@ -39,22 +39,36 @@
       }
     });
 
-    // 2. Listen for print commands from your Google Apps Script App tab
-    window.addEventListener('message', async (event) => {
-      if (!zebraDevice) return;
+  // Listen for print commands from your Google Apps Script App tab
+  window.addEventListener('message', async (event) => {
+    if (!zebraDevice) {
+      // Notify the scanner app if someone forgot to pair the hardware
+      event.source.postMessage({ type: 'PRINT_ERROR', error: 'Printer disconnected on terminal tab.' }, event.origin);
+      return;
+    }
+    
+    if (event.data && event.data.type === 'ZEBRA_PRINT_JOB') {
+      const encoder = new TextEncoder();
+      const rawBytes = encoder.encode(event.data.zpl);
       
-      if (event.data && event.data.type === 'ZEBRA_PRINT_JOB') {
-        const encoder = new TextEncoder();
-        const rawBytes = encoder.encode(event.data.zpl);
+      try {
+        await zebraDevice.transferOut(1, rawBytes);
         
-        try {
-          await zebraDevice.transferOut(1, rawBytes);
-          console.log("Label successfully sent to hardware line.");
-        } catch (printError) {
-          console.error("Hardware transmission error: ", printError);
-        }
+        // SUCCESS HANDSHAKE: Tell the scanner app the job was fired
+        event.source.postMessage({ 
+          type: 'PRINT_SUCCESS', 
+          tag: event.data.tag 
+        }, event.origin);
+        
+      } catch (printError) {
+        // FAILURE HANDSHAKE: Tell the scanner app the hardware jammed/failed
+        event.source.postMessage({ 
+          type: 'PRINT_ERROR', 
+          error: printError.message 
+        }, event.origin);
       }
-    });
+    }
+  });
   </script>
 </body>
 </html>
