@@ -3,321 +3,195 @@
 <head>
   <title>Zebra USB Print Terminal</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 30px;
-      text-align: center;
-      background: #f4f6f9;
-      color: #333;
-    }
+    body { font-family: sans-serif; padding: 30px; text-align: center; background: #f4f6f9; color: #333; }
+    .box { border: 2px dashed #6f42c1; padding: 30px; background: white; display: inline-block; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); width: 450px; }
+    button { padding: 12px 24px; font-size: 16px; background: #6f42c1; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    button:active { background: #5a32a3; }
+    #status { font-weight: bold; margin-top: 15px; color: #666; font-size: 14px; }
 
-    .box {
-      border: 2px dashed #6f42c1;
-      padding: 30px;
-      background: white;
-      display: inline-block;
-      border-radius: 8px;
-      margin-top: 20px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-      width: 450px;
-    }
-
-    button {
-      padding: 12px 24px;
-      font-size: 16px;
-      background: #6f42c1;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-
-    button:active {
-      background: #5a32a3;
-    }
-
-    #status {
-      font-weight: bold;
-      margin-top: 15px;
-      color: #666;
-      font-size: 14px;
-    }
-
-    .log-box {
-      margin-top: 20px;
-      text-align: left;
-      background: #222;
-      color: #00ff00;
-      font-family: monospace;
-      padding: 15px;
-      border-radius: 6px;
-      height: 220px;
-      overflow-y: auto;
-      box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
-    }
-
-    .log-entry {
-      margin-bottom: 8px;
-      border-bottom: 1px solid #333;
-      padding-bottom: 4px;
-      font-size: 12px;
-    }
+    .log-box { margin-top: 20px; text-align: left; background: #222; color: #00ff00; font-family: monospace; padding: 15px; border-radius: 6px; height: 180px; overflow-y: auto; }
+    .log-entry { margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 4px; font-size: 12px; }
   </style>
 </head>
+
 <body>
 
 <div class="box">
-  <h2>Zebra USB Print Terminal</h2>
+  <h2>Zebra Print Terminal</h2>
 
-  <p>
-    Keep this tab open in the background to handle printing from your scanner app.
-  </p>
+  <button id="connectBtn">🔌 Connect Printer</button>
 
-  <button id="connectBtn">
-    🔌 Connect Physical Zebra Printer
-  </button>
+  <p id="status">Status: Disconnected</p>
 
-  <p id="status">
-    Status: Disconnected (Running in Simulation Mode 🖥️)
-  </p>
-
-  <h4 style="text-align:left;margin-bottom:5px;color:#555;">
-    Activity Log:
-  </h4>
-
-  <div id="logBox" class="log-box">
-    <div class="log-entry" style="color:#888;">
-      > System ready. Awaiting data from scanner app...
-    </div>
-  </div>
+  <div id="logBox" class="log-box"></div>
 </div>
 
-<script>
+<!-- Zebra Browser Print (Windows fallback) -->
+<script src="http://localhost:9100/BrowserPrint-3.0.216.min.js"></script>
 
+<script>
 let zebraDevice = null;
+let browserPrinter = null;
 
 const logBox = document.getElementById("logBox");
 
-function logToScreen(message, isAlert = false) {
-  const entry = document.createElement("div");
-
-  entry.className = "log-entry";
-
-  if (isAlert) {
-    entry.style.color = "#ffcc00";
-  }
-
-  const timestamp = new Date().toLocaleTimeString();
-
-  entry.innerHTML = `[${timestamp}] ${message}`;
-
-  logBox.appendChild(entry);
-
+function logToScreen(msg) {
+  const div = document.createElement("div");
+  div.className = "log-entry";
+  div.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logBox.appendChild(div);
   logBox.scrollTop = logBox.scrollHeight;
 }
 
-// Check browser support
-if (!navigator.usb) {
-  logToScreen(
-    "❌ WebUSB is not supported in this browser. Use Chrome or Edge.",
-    true
-  );
+/* =========================
+   1. TRY BROWSER PRINT FIRST
+   ========================= */
+function initBrowserPrint() {
+  return new Promise((resolve) => {
+    try {
+      if (!window.BrowserPrint) {
+        return resolve(false);
+      }
+
+      BrowserPrint.getDefaultDevice("printer", function(device) {
+        if (!device) return resolve(false);
+
+        browserPrinter = device;
+        logToScreen("🖨️ Browser Print printer detected (Windows mode)");
+        resolve(true);
+      }, function() {
+        resolve(false);
+      });
+
+    } catch (e) {
+      resolve(false);
+    }
+  });
 }
 
-// Connect printer
-document.getElementById("connectBtn").addEventListener("click", async () => {
-
+/* =========================
+   2. WEBUSB FALLBACK
+   ========================= */
+async function initWebUSB() {
   try {
-
-    logToScreen("🔍 Searching for Zebra USB devices...");
+    if (!navigator.usb) {
+      throw new Error("WebUSB not supported");
+    }
 
     zebraDevice = await navigator.usb.requestDevice({
       filters: [{ vendorId: 0x0A5F }]
     });
 
-    console.log("Selected Device:", zebraDevice);
-
-    logToScreen(
-      `📦 Device Selected: ${zebraDevice.productName || "Unknown Zebra"}`
-    );
-
-    if (!zebraDevice.opened) {
-      logToScreen("🔓 Opening device...");
-      await zebraDevice.open();
-      logToScreen("✅ Device opened");
-    }
-
-    console.log("Configurations:", zebraDevice.configurations);
+    await zebraDevice.open();
 
     if (!zebraDevice.configuration) {
-
-      if (!zebraDevice.configurations.length) {
-        throw new Error("No USB configurations found.");
-      }
-
-      const configNumber =
-        zebraDevice.configurations[0].configurationValue;
-
-      logToScreen(
-        `⚙️ Selecting configuration ${configNumber}...`
-      );
-
-      await zebraDevice.selectConfiguration(configNumber);
-
-      logToScreen(
-        `✅ Configuration ${configNumber} selected`
-      );
+      await zebraDevice.selectConfiguration(1);
     }
 
-    console.log(
-      "Active Configuration:",
-      zebraDevice.configuration
-    );
+    await zebraDevice.claimInterface(0);
 
-    const interfaces =
-      zebraDevice.configuration.interfaces;
+    logToScreen("🔌 WebUSB Zebra connected (Chromebook/USB mode)");
+    return true;
 
-    console.log("Interfaces:", interfaces);
-
-    if (!interfaces.length) {
-      throw new Error("No USB interfaces available.");
-    }
-
-    const interfaceNumber =
-      interfaces[0].interfaceNumber;
-
-    logToScreen(
-      `🔌 Claiming interface ${interfaceNumber}...`
-    );
-
-    await zebraDevice.claimInterface(interfaceNumber);
-
-    logToScreen(
-      `✅ Interface ${interfaceNumber} claimed`
-    );
-
-    document.getElementById("status").innerText =
-      "Status: Connected to " +
-      (zebraDevice.productName || "Zebra");
-
-    document.getElementById("status").style.color =
-      "green";
-
-    logToScreen(
-      "🖨️ Zebra printer ready for print jobs."
-    );
-
-    console.log("USB Device Details:", {
-      vendorId: zebraDevice.vendorId,
-      productId: zebraDevice.productId,
-      manufacturerName: zebraDevice.manufacturerName,
-      productName: zebraDevice.productName,
-      serialNumber: zebraDevice.serialNumber,
-      configuration: zebraDevice.configuration
-    });
-
-  } catch (error) {
-
-    console.error("USB ERROR:", error);
-
-    document.getElementById("status").innerText =
-      `Connection Failed: ${error.name || "Error"} - ${error.message}`;
-
-    document.getElementById("status").style.color =
-      "red";
-
-    logToScreen(
-      `❌ ${error.name || "Error"}: ${error.message}`,
-      true
-    );
-
+  } catch (err) {
+    logToScreen("❌ WebUSB failed: " + err.message);
     zebraDevice = null;
+    return false;
   }
+}
+
+/* =========================
+   CONNECT BUTTON
+   ========================= */
+document.getElementById("connectBtn").addEventListener("click", async () => {
+
+  logToScreen("🔍 Connecting printer...");
+
+  const browserOk = await initBrowserPrint();
+
+  if (browserOk) {
+    document.getElementById("status").innerText = "Status: Browser Print (Windows)";
+    document.getElementById("status").style.color = "green";
+    return;
+  }
+
+  const usbOk = await initWebUSB();
+
+  if (usbOk) {
+    document.getElementById("status").innerText = "Status: WebUSB Connected";
+    document.getElementById("status").style.color = "green";
+    return;
+  }
+
+  document.getElementById("status").innerText = "Status: No printer found";
+  document.getElementById("status").style.color = "red";
 });
 
-// Listen for print jobs
+/* =========================
+   PRINT HANDLER
+   ========================= */
 window.addEventListener("message", async (event) => {
 
-  if (
-    event.data &&
-    event.data.type === "ZEBRA_PRINT_JOB"
-  ) {
+  if (!event.data || event.data.type !== "ZEBRA_PRINT_JOB") return;
 
-    logToScreen(
-      `📩 Incoming command received for Tag: <strong>${event.data.tag}</strong>`
-    );
+  logToScreen("📩 Print job received: " + event.data.tag);
 
-    if (!zebraDevice) {
+  try {
 
-      logToScreen(
-        "🖥️ [Sim Mode] Simulating print job."
-      );
+    /* ---- WINDOWS (Browser Print) ---- */
+    if (browserPrinter) {
 
-      event.source.postMessage(
-        {
+      browserPrinter.send(event.data.zpl, function() {
+        logToScreen("🖨️ Browser Print success");
+
+        event.source.postMessage({
           type: "PRINT_SUCCESS",
-          tag: event.data.tag + " (Simulated)"
-        },
-        event.origin
-      );
+          tag: event.data.tag
+        }, event.origin);
+
+      }, function(err) {
+        logToScreen("❌ Browser Print error: " + err);
+      });
 
       return;
     }
 
-    try {
+    /* ---- CHROMEBOOK / WEBUSB ---- */
+    if (zebraDevice) {
 
       const encoder = new TextEncoder();
+      const data = encoder.encode(event.data.zpl);
 
-      const rawBytes =
-        encoder.encode(event.data.zpl);
+      await zebraDevice.transferOut(1, data);
 
-      console.log(
-        "Sending bytes:",
-        rawBytes.length
-      );
+      logToScreen("🖨️ WebUSB print success");
 
-      await zebraDevice.transferOut(
-        1,
-        rawBytes
-      );
+      event.source.postMessage({
+        type: "PRINT_SUCCESS",
+        tag: event.data.tag
+      }, event.origin);
 
-      logToScreen(
-        "🖨️ Hardware transmission successful."
-      );
-
-      event.source.postMessage(
-        {
-          type: "PRINT_SUCCESS",
-          tag: event.data.tag
-        },
-        event.origin
-      );
-
-    } catch (printError) {
-
-      console.error(
-        "PRINT ERROR:",
-        printError
-      );
-
-      logToScreen(
-        `❌ Physical hardware write crash: ${printError.message}`,
-        true
-      );
-
-      event.source.postMessage(
-        {
-          type: "PRINT_ERROR",
-          error: printError.message
-        },
-        event.origin
-      );
+      return;
     }
+
+    /* ---- SIMULATION ---- */
+    logToScreen("🖥️ No printer available, simulating");
+
+    event.source.postMessage({
+      type: "PRINT_SUCCESS",
+      tag: event.data.tag + " (Simulated)"
+    }, event.origin);
+
+  } catch (err) {
+    logToScreen("❌ Print error: " + err.message);
+
+    event.source.postMessage({
+      type: "PRINT_ERROR",
+      error: err.message
+    }, event.origin);
   }
 });
 
 </script>
-
 </body>
 </html>
