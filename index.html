@@ -121,12 +121,12 @@
 // ============================================================================
 // CONFIGURATION & STATE
 // ============================================================================
-// Security: Replace this with the exact domain of your Google Apps Script app
-const ALLOWED_ORIGIN = "*"; // e.g., "https://script.google.com"
+const ALLOWED_ORIGIN = "*"; // Replace with your Google Apps Script URL
 
 // Hardware State
 let zebraDevice = null;
 let browserPrinter = null;
+let currentWeight = null; // Starts as null!
 
 // OS Environment Checks
 const isWindows = navigator.userAgent.includes("Windows");
@@ -165,21 +165,14 @@ async function getWeightFromScale() {
   // SIMULATION: Wait 500ms to mimic hardware latency
   await new Promise(resolve => setTimeout(resolve, 500));
   
-  // Simulate a weight between 0.5kg and 5.0kg
-  const simulatedWeight = (Math.random() * 4.5 + 0.5).toFixed(3);
+  // Update our global variable
+  currentWeight = (Math.random() * 4.5 + 0.5).toFixed(3);
   
-  logToScreen(`✅ Received weight: ${simulatedWeight} kg`);
-  els.weightDisplay.innerHTML = `${simulatedWeight} <small style="font-size: 16px;">kg</small>`;
+  logToScreen(`✅ Scale updated. Current weight: ${currentWeight} kg`);
+  els.weightDisplay.innerHTML = `${currentWeight} <small style="font-size: 16px;">kg</small>`;
   
-  // Send data back to the main app (Scanner App)
-  if (window.opener) {
-    window.opener.postMessage({ 
-      type: 'WEIGHT_UPDATE', 
-      weight: simulatedWeight 
-    }, ALLOWED_ORIGIN);
-  } else {
-    logToScreen("⚠️ No connected parent window found to send weight to.", true);
-  }
+  // Notice: We deleted the window.opener code! 
+  // The scale just silently updates the Terminal's memory now.
 }
 
 // ============================================================================
@@ -188,19 +181,16 @@ async function getWeightFromScale() {
 async function connectPrinter() {
   try {
     logToScreen("🔍 Detecting platform...");
-    
-    // Reset existing states
     zebraDevice = null;
     browserPrinter = null;
 
     // PATH 1: Windows (Zebra Browser Print Local App)
     if (isWindows) {
       logToScreen("🪟 Windows detected → aiming for Browser Print app");
-
       if (window.BrowserPrint) {
         window.BrowserPrint.getDefaultDevice("printer", function(device) {
           if (!device) {
-            logToScreen("❌ Zebra desktop utility is running, but no physical printer is selected.", true);
+            logToScreen("❌ Zebra desktop utility running, but no printer selected.", true);
             return;
           }
           browserPrinter = device;
@@ -208,10 +198,8 @@ async function connectPrinter() {
           els.status.style.color = "green";
           logToScreen("🖨️ Browser Print local client linked and ready");
         }, function(err) {
-          logToScreen("❌ Failed to reach local Zebra service. Is the desktop app running? Error: " + err, true);
+          logToScreen("❌ Failed to reach local Zebra service: " + err, true);
         });
-      } else {
-        logToScreen("❌ BrowserPrint script missing or failed to initialize.", true);
       }
       return;
     }
@@ -219,18 +207,11 @@ async function connectPrinter() {
     // PATH 2: Chromebook / Direct WebUSB
     if (isChromeOS || navigator.usb) {
       logToScreen("💻 ChromeOS / WebUSB mode initiated");
-
-      // Prompt user to select USB device (Zebra Vendor ID = 0x0A5F)
-      zebraDevice = await navigator.usb.requestDevice({
-        filters: [{ vendorId: 0x0A5F }]
-      });
-
+      zebraDevice = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x0A5F }] });
       logToScreen(`📦 Selected: ${zebraDevice.productName || "Zebra Printer"}`);
 
       await zebraDevice.open();
-      if (!zebraDevice.configuration) {
-        await zebraDevice.selectConfiguration(1);
-      }
+      if (!zebraDevice.configuration) await zebraDevice.selectConfiguration(1);
       await zebraDevice.claimInterface(0);
 
       els.status.innerText = "Status: WebUSB Connected";
@@ -239,16 +220,9 @@ async function connectPrinter() {
       return;
     }
 
-    // Fallback
     logToScreen("⚠️ Environment not supported for USB direct connections.", true);
-    els.status.innerText = "Status: No supported connection path";
-    els.status.style.color = "red";
-
   } catch (error) {
-    console.error(error);
-    logToScreen(`❌ Connection dropped: ${error.name} - ${error.message}`, true);
-    els.status.innerText = "Status: Connection failed";
-    els.status.style.color = "red";
+    logToScreen(`❌ Connection dropped: ${error.message}`, true);
     zebraDevice = null;
   }
 }
@@ -260,41 +234,47 @@ els.simWeightBtn.addEventListener('click', getWeightFromScale);
 els.connectBtn.addEventListener('click', connectPrinter);
 
 window.addEventListener('message', async (event) => {
-  // Security validation
-  if (ALLOWED_ORIGIN !== "*" && !event.origin.includes(ALLOWED_ORIGIN)) {
-    return; // Ignore messages from unauthorized domains
-  }
-
+  if (ALLOWED_ORIGIN !== "*" && !event.origin.includes(ALLOWED_ORIGIN)) return;
   if (!event.data || event.data.type !== 'ZEBRA_PRINT_JOB') return;
 
   logToScreen(`📩 Print job intercepted: ${event.data.tag}`);
 
+  // Helper to format the payload so we don't repeat ourselves
+  // If currentWeight is null, this safely assigns NaN per your request
+  const buildSuccessPayload = () => ({
+    type: "PRINT_SUCCESS",
+    tag: event.data.tag,
+    weight: currentWeight !== null ? parseFloat(currentWeight) : NaN
+  });
+
   try {
-    // Execute print via Windows Browser Print
+    // 1. Windows Browser Print
     if (browserPrinter) {
       browserPrinter.send(event.data.zpl, function() {
         logToScreen("🖨️ Job pushed via local Browser Print client");
-        event.source.postMessage({ type: "PRINT_SUCCESS", tag: event.data.tag }, event.origin);
+        event.source.postMessage(buildSuccessPayload(), event.origin);
       }, function(err) {
-        logToScreen("❌ Browser Print error during transfer: " + err, true);
+        logToScreen("❌ Browser Print error: " + err, true);
         event.source.postMessage({ type: "PRINT_ERROR", error: err }, event.origin);
       });
       return;
     }
 
-    // Execute print via Direct WebUSB
+    // 2. Direct WebUSB
     if (zebraDevice) {
       const data = new TextEncoder().encode(event.data.zpl);
-      // Bulk endpoint 1 is standard for most Zebra USB endpoints
       await zebraDevice.transferOut(1, data); 
       logToScreen("🖨️ Raw data piped out via WebUSB successfully");
-      event.source.postMessage({ type: "PRINT_SUCCESS", tag: event.data.tag }, event.origin);
+      event.source.postMessage(buildSuccessPayload(), event.origin);
       return;
     }
 
-    // Fallback: Simulation Mode
-    logToScreen("🖥️ Simulation Mode active: Print job logged but not sent to physical hardware");
-    event.source.postMessage({ type: "PRINT_SUCCESS", tag: event.data.tag + " (Simulated)" }, event.origin);
+    // 3. Fallback: Simulation Mode
+    logToScreen("🖥️ Simulation Mode: Print logged, returning current weight state.");
+    
+    const simPayload = buildSuccessPayload();
+    simPayload.tag = simPayload.tag + " (Simulated)";
+    event.source.postMessage(simPayload, event.origin);
 
   } catch (err) {
     logToScreen(`❌ Print processing failure: ${err.message}`, true);
