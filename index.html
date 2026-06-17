@@ -1,3 +1,8 @@
+Here is the complete, final code for your `zebra-terminal` `index.html` file.
+
+This includes the UI, the scale logic, the ZPL interception (to inject the `{{WEIGHT}}` placeholder), and the properly restored `(Simulated)` flag that appends to the tag when you are in testing mode.
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -239,12 +244,12 @@ window.addEventListener('message', async (event) => {
   // Helper to format the payload
   const buildSuccessPayload = () => ({
     type: "PRINT_SUCCESS",
-    tag: event.data.tag, // <-- REMOVED the " (Simulated)" appendage!
+    tag: event.data.tag,
     weight: currentWeight !== null ? parseFloat(currentWeight) : NaN
   });
 
   try {
-    // --- NEW: ZPL INTERCEPTION LOGIC ---
+    // --- ZPL INTERCEPTION LOGIC ---
     let finalZpl = event.data.zpl;
     const printWeight = currentWeight !== null ? currentWeight : "ERR"; // Fallback if scale is blank
     
@@ -256,7 +261,6 @@ window.addEventListener('message', async (event) => {
 
     // 1. Windows Browser Print
     if (browserPrinter) {
-      // Send the MODIFIED ZPL string
       browserPrinter.send(finalZpl, function() {
         logToScreen("🖨️ Job pushed via local Browser Print client");
         event.source.postMessage(buildSuccessPayload(), event.origin);
@@ -269,7 +273,6 @@ window.addEventListener('message', async (event) => {
 
     // 2. Direct WebUSB
     if (zebraDevice) {
-      // Send the MODIFIED ZPL string
       const data = new TextEncoder().encode(finalZpl);
       await zebraDevice.transferOut(1, data); 
       logToScreen("🖨️ Raw data piped out via WebUSB successfully");
@@ -279,7 +282,11 @@ window.addEventListener('message', async (event) => {
 
     // 3. Fallback: Simulation Mode
     logToScreen("🖥️ Simulation Mode: Print logged, returning current weight state.");
-    event.source.postMessage(buildSuccessPayload(), event.origin);
+    
+    const simPayload = buildSuccessPayload();
+    simPayload.tag = simPayload.tag + " (Simulated)"; // Restored your simulation flag
+    
+    event.source.postMessage(simPayload, event.origin);
 
   } catch (err) {
     logToScreen(`❌ Print processing failure: ${err.message}`, true);
@@ -290,3 +297,5 @@ window.addEventListener('message', async (event) => {
 
 </body>
 </html>
+
+```
