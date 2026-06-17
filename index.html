@@ -170,9 +170,6 @@ async function getWeightFromScale() {
   
   logToScreen(`✅ Scale updated. Current weight: ${currentWeight} kg`);
   els.weightDisplay.innerHTML = `${currentWeight} <small style="font-size: 16px;">kg</small>`;
-  
-  // Notice: We deleted the window.opener code! 
-  // The scale just silently updates the Terminal's memory now.
 }
 
 // ============================================================================
@@ -239,18 +236,28 @@ window.addEventListener('message', async (event) => {
 
   logToScreen(`📩 Print job intercepted: ${event.data.tag}`);
 
-  // Helper to format the payload so we don't repeat ourselves
-  // If currentWeight is null, this safely assigns NaN per your request
+  // Helper to format the payload
   const buildSuccessPayload = () => ({
     type: "PRINT_SUCCESS",
-    tag: event.data.tag,
+    tag: event.data.tag, // <-- REMOVED the " (Simulated)" appendage!
     weight: currentWeight !== null ? parseFloat(currentWeight) : NaN
   });
 
   try {
+    // --- NEW: ZPL INTERCEPTION LOGIC ---
+    let finalZpl = event.data.zpl;
+    const printWeight = currentWeight !== null ? currentWeight : "ERR"; // Fallback if scale is blank
+    
+    if (finalZpl.includes("{{WEIGHT}}")) {
+      finalZpl = finalZpl.replace("{{WEIGHT}}", printWeight);
+      logToScreen(`⚖️ Injected weight (${printWeight} kg) into ZPL command`);
+    }
+    // -----------------------------------
+
     // 1. Windows Browser Print
     if (browserPrinter) {
-      browserPrinter.send(event.data.zpl, function() {
+      // Send the MODIFIED ZPL string
+      browserPrinter.send(finalZpl, function() {
         logToScreen("🖨️ Job pushed via local Browser Print client");
         event.source.postMessage(buildSuccessPayload(), event.origin);
       }, function(err) {
@@ -262,7 +269,8 @@ window.addEventListener('message', async (event) => {
 
     // 2. Direct WebUSB
     if (zebraDevice) {
-      const data = new TextEncoder().encode(event.data.zpl);
+      // Send the MODIFIED ZPL string
+      const data = new TextEncoder().encode(finalZpl);
       await zebraDevice.transferOut(1, data); 
       logToScreen("🖨️ Raw data piped out via WebUSB successfully");
       event.source.postMessage(buildSuccessPayload(), event.origin);
@@ -271,10 +279,7 @@ window.addEventListener('message', async (event) => {
 
     // 3. Fallback: Simulation Mode
     logToScreen("🖥️ Simulation Mode: Print logged, returning current weight state.");
-    
-    const simPayload = buildSuccessPayload();
-    simPayload.tag = simPayload.tag + " (Simulated)";
-    event.source.postMessage(simPayload, event.origin);
+    event.source.postMessage(buildSuccessPayload(), event.origin);
 
   } catch (err) {
     logToScreen(`❌ Print processing failure: ${err.message}`, true);
