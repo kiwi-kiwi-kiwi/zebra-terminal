@@ -1,45 +1,164 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <title>Zebra USB Print Terminal</title>
-  
   <script src="https://cdn.jsdelivr.net/npm/zebra-browser-print-min@3.0.216/BrowserPrint-3.0.216.min.js"></script>
 
   <style>
-    body { font-family: sans-serif; padding: 30px; text-align: center; background: #f4f6f9; color: #333; }
-    .box { border: 2px dashed #6f42c1; padding: 30px; background: white; display: inline-block; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); width: 450px; }
-    button { padding: 12px 24px; font-size: 16px; background: #6f42c1; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-    button:active { background: #5a32a3; }
-    #status { font-weight: bold; margin-top: 15px; color: #666; font-size: 14px; }
-    .log-box { margin-top: 20px; text-align: left; background: #222; color: #00ff00; font-family: monospace; padding: 15px; border-radius: 6px; height: 180px; overflow-y: auto; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); }
-    .log-entry { margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 4px; font-size: 12px; }
+    body { 
+      font-family: sans-serif; 
+      padding: 30px; 
+      text-align: center; 
+      background: #f4f6f9; 
+      color: #333; 
+    }
+    .box { 
+      border: 2px dashed #6f42c1; 
+      padding: 30px; 
+      background: white; 
+      display: inline-block; 
+      border-radius: 8px; 
+      margin-top: 20px; 
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+      width: 450px; 
+    }
+    button { 
+      padding: 12px 24px; 
+      font-size: 16px; 
+      background: #6f42c1; 
+      color: white; 
+      border: none; 
+      border-radius: 4px; 
+      cursor: pointer; 
+      font-weight: bold; 
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #5a32a3;
+    }
+    button:active { 
+      background: #462680; 
+    }
+    #status { 
+      font-weight: bold; 
+      margin-top: 15px; 
+      color: #666; 
+      font-size: 14px; 
+    }
+    .scale-container {
+      background: #f8f9fa; 
+      padding: 15px; 
+      border-radius: 6px; 
+      margin: 15px 0; 
+      border: 1px solid #ddd;
+    }
+    .scale-container h3 {
+      margin: 0; 
+      color: #555;
+    }
+    #weightDisplay { 
+      font-size: 32px; 
+      font-weight: bold; 
+      color: #6f42c1; 
+    }
+    #simWeightBtn {
+      background: #555; 
+      padding: 5px 10px; 
+      font-size: 12px; 
+      margin-top: 10px;
+    }
+    #simWeightBtn:hover {
+      background: #444;
+    }
+    .log-header {
+      text-align: left; 
+      margin-bottom: 5px; 
+      color: #555;
+    }
+    .log-box { 
+      margin-top: 20px; 
+      text-align: left; 
+      background: #222; 
+      color: #00ff00; 
+      font-family: monospace; 
+      padding: 15px; 
+      border-radius: 6px; 
+      height: 180px; 
+      overflow-y: auto; 
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); 
+    }
+    .log-entry { 
+      margin-bottom: 8px; 
+      border-bottom: 1px solid #333; 
+      padding-bottom: 4px; 
+      font-size: 12px; 
+    }
   </style>
 </head>
 <body>
 
 <div class="box">
-  <h2>Zebra USB Print Terminal</h2>
-  <p>Keep this tab open in the background to handle printing from your scanner app.</p>
+  <h2>Zebra Print & Scale Terminal</h2>
+  <p>Keep this tab open in the background to handle hardware integrations from your app.</p>
 
   <button id="connectBtn">🔌 Connect Physical Zebra Printer</button>
   <p id="status">Status: Disconnected (Running in Simulation Mode 🖥️)</p>
-  <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 15px 0; border: 1px solid #ddd;">
-    <h3 style="margin:0; color:#555;">Live Weight</h3>
-    <div id="weightDisplay" style="font-size: 32px; font-weight: bold; color: #6f42c1;">0.00 <small style="font-size: 16px;">kg</small></div>
-    <button id="simWeightBtn" style="background:#555; padding: 5px 10px; font-size: 12px; margin-top: 10px;">Simulate Random Weight</button>
+  
+  <div class="scale-container">
+    <h3>Live Weight</h3>
+    <div id="weightDisplay">0.00 <small style="font-size: 16px;">kg</small></div>
+    <button id="simWeightBtn">Simulate Random Weight</button>
   </div>
-  <h4 style="text-align: left; margin-bottom: 5px; color: #555;">Activity Log:</h4>
+  
+  <h4 class="log-header">Activity Log:</h4>
   <div id="logBox" class="log-box">
     <div class="log-entry" style="color: #888;">> System ready. Awaiting data from scanner app...</div>
   </div>
 </div>
 
 <script>
+// ============================================================================
+// CONFIGURATION & STATE
+// ============================================================================
+// Security: Replace this with the exact domain of your Google Apps Script app
+const ALLOWED_ORIGIN = "*"; // e.g., "https://script.google.com"
 
-const weightDisplay = document.getElementById('weightDisplay');
-const simWeightBtn = document.getElementById('simWeightBtn');
+// Hardware State
+let zebraDevice = null;
+let browserPrinter = null;
 
-// This function acts as your "Scale Driver"
+// OS Environment Checks
+const isWindows = navigator.userAgent.includes("Windows");
+const isChromeOS = navigator.userAgent.includes("CrOS");
+
+// DOM Elements
+const els = {
+  weightDisplay: document.getElementById('weightDisplay'),
+  simWeightBtn: document.getElementById('simWeightBtn'),
+  connectBtn: document.getElementById('connectBtn'),
+  status: document.getElementById('status'),
+  logBox: document.getElementById('logBox')
+};
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+function logToScreen(message, isAlert = false) {
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  if (isAlert) entry.style.color = '#ffcc00';
+
+  const timestamp = new Date().toLocaleTimeString();
+  entry.innerHTML = `[${timestamp}] ${message}`;
+
+  els.logBox.appendChild(entry);
+  els.logBox.scrollTop = els.logBox.scrollHeight;
+}
+
+// ============================================================================
+// HARDWARE: SCALE LOGIC
+// ============================================================================
 async function getWeightFromScale() {
   logToScreen("⚖️ Requesting weight from scale...");
   
@@ -49,68 +168,47 @@ async function getWeightFromScale() {
   // Simulate a weight between 0.5kg and 5.0kg
   const simulatedWeight = (Math.random() * 4.5 + 0.5).toFixed(3);
   
-  logToScreen("✅ Received weight: " + simulatedWeight + " kg");
-  weightDisplay.innerHTML = `${simulatedWeight} <small style="font-size: 16px;">kg</small>`;
+  logToScreen(`✅ Received weight: ${simulatedWeight} kg`);
+  els.weightDisplay.innerHTML = `${simulatedWeight} <small style="font-size: 16px;">kg</small>`;
   
-  // Optional: Send this back to your Scanner app if needed
+  // Send data back to the main app (Scanner App)
   if (window.opener) {
-    window.opener.postMessage({ type: 'WEIGHT_UPDATE', weight: simulatedWeight }, '*');
+    window.opener.postMessage({ 
+      type: 'WEIGHT_UPDATE', 
+      weight: simulatedWeight 
+    }, ALLOWED_ORIGIN);
+  } else {
+    logToScreen("⚠️ No connected parent window found to send weight to.", true);
   }
 }
 
-simWeightBtn.addEventListener('click', getWeightFromScale);
-  
-// Global printer states
-let zebraDevice = null;
-let browserPrinter = null;
-
-const logBox = document.getElementById('logBox');
-const statusEl = document.getElementById('status');
-
-// Helper to push clean logs to the on-screen terminal
-function logToScreen(message, isAlert = false) {
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  if (isAlert) entry.style.color = '#ffcc00';
-
-  const timestamp = new Date().toLocaleTimeString();
-  entry.innerHTML = `[${timestamp}] ${message}`;
-
-  logBox.appendChild(entry);
-  logBox.scrollTop = logBox.scrollHeight;
-}
-
-// Simple OS checks
-const isWindows = navigator.userAgent.includes("Windows");
-const isChromeOS = navigator.userAgent.includes("CrOS");
-
-// Triggered when clicking "Connect"
-document.getElementById('connectBtn').addEventListener('click', async () => {
+// ============================================================================
+// HARDWARE: PRINTER CONNECTION
+// ============================================================================
+async function connectPrinter() {
   try {
     logToScreen("🔍 Detecting platform...");
     
-    // Reset any existing connection states
+    // Reset existing states
     zebraDevice = null;
     browserPrinter = null;
 
-    // PATH 1: Windows flow (Requires the Zebra Browser Print desktop app running locally)
+    // PATH 1: Windows (Zebra Browser Print Local App)
     if (isWindows) {
       logToScreen("🪟 Windows detected → aiming for Browser Print app");
 
       if (window.BrowserPrint) {
-        BrowserPrint.getDefaultDevice("printer", function(device) {
+        window.BrowserPrint.getDefaultDevice("printer", function(device) {
           if (!device) {
-            logToScreen("❌ Zebra desktop utility is running, but no physical printer is selected or found in it.", true);
+            logToScreen("❌ Zebra desktop utility is running, but no physical printer is selected.", true);
             return;
           }
-
           browserPrinter = device;
-          statusEl.innerText = "Status: Windows (Browser Print Connected)";
-          statusEl.style.color = "green";
+          els.status.innerText = "Status: Windows (Browser Print Connected)";
+          els.status.style.color = "green";
           logToScreen("🖨️ Browser Print local client linked and ready");
-
         }, function(err) {
-          logToScreen("❌ Failed to reach local Zebra service. Make sure the desktop app is running: " + err, true);
+          logToScreen("❌ Failed to reach local Zebra service. Is the desktop app running? Error: " + err, true);
         });
       } else {
         logToScreen("❌ BrowserPrint script missing or failed to initialize.", true);
@@ -118,98 +216,89 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
       return;
     }
 
-    // PATH 2: Chromebook / Direct WebUSB flow
+    // PATH 2: Chromebook / Direct WebUSB
     if (isChromeOS || navigator.usb) {
       logToScreen("💻 ChromeOS / WebUSB mode initiated");
 
-      // Open browser prompt to pick a USB device (Zebra Vendor ID = 0x0A5F)
+      // Prompt user to select USB device (Zebra Vendor ID = 0x0A5F)
       zebraDevice = await navigator.usb.requestDevice({
         filters: [{ vendorId: 0x0A5F }]
       });
 
-      logToScreen("📦 Selected: " + (zebraDevice.productName || "Zebra Printer"));
+      logToScreen(`📦 Selected: ${zebraDevice.productName || "Zebra Printer"}`);
 
       await zebraDevice.open();
-      
       if (!zebraDevice.configuration) {
         await zebraDevice.selectConfiguration(1);
       }
-      
       await zebraDevice.claimInterface(0);
 
-      statusEl.innerText = "Status: WebUSB Connected";
-      statusEl.style.color = "green";
+      els.status.innerText = "Status: WebUSB Connected";
+      els.status.style.color = "green";
       logToScreen("🔌 WebUSB direct connection established successfully");
       return;
     }
 
-    // Fallback if neither condition hits
+    // Fallback
     logToScreen("⚠️ Environment not supported for USB direct connections.", true);
-    statusEl.innerText = "Status: No supported connection path";
-    statusEl.style.color = "red";
+    els.status.innerText = "Status: No supported connection path";
+    els.status.style.color = "red";
 
   } catch (error) {
     console.error(error);
     logToScreen(`❌ Connection dropped: ${error.name} - ${error.message}`, true);
-    statusEl.innerText = "Status: Connection failed";
-    statusEl.style.color = "red";
+    els.status.innerText = "Status: Connection failed";
+    els.status.style.color = "red";
     zebraDevice = null;
   }
-});
+}
 
-// Listener for cross-window messages (e.g. from your scanner app)
+// ============================================================================
+// EVENT LISTENERS (Cross-Window Communication)
+// ============================================================================
+els.simWeightBtn.addEventListener('click', getWeightFromScale);
+els.connectBtn.addEventListener('click', connectPrinter);
+
 window.addEventListener('message', async (event) => {
+  // Security validation
+  if (ALLOWED_ORIGIN !== "*" && !event.origin.includes(ALLOWED_ORIGIN)) {
+    return; // Ignore messages from unauthorized domains
+  }
+
   if (!event.data || event.data.type !== 'ZEBRA_PRINT_JOB') return;
 
-  logToScreen("📩 Print job intercepted: " + event.data.tag);
+  logToScreen(`📩 Print job intercepted: ${event.data.tag}`);
 
   try {
-    // Execute print via Windows Browser Print local app
+    // Execute print via Windows Browser Print
     if (browserPrinter) {
       browserPrinter.send(event.data.zpl, function() {
         logToScreen("🖨️ Job pushed via local Browser Print client");
-        
-        event.source.postMessage({
-          type: "PRINT_SUCCESS",
-          tag: event.data.tag
-        }, event.origin);
-        
+        event.source.postMessage({ type: "PRINT_SUCCESS", tag: event.data.tag }, event.origin);
       }, function(err) {
         logToScreen("❌ Browser Print error during transfer: " + err, true);
+        event.source.postMessage({ type: "PRINT_ERROR", error: err }, event.origin);
       });
       return;
     }
 
-    // Execute print via direct WebUSB
+    // Execute print via Direct WebUSB
     if (zebraDevice) {
       const data = new TextEncoder().encode(event.data.zpl);
-      
       // Bulk endpoint 1 is standard for most Zebra USB endpoints
       await zebraDevice.transferOut(1, data); 
       logToScreen("🖨️ Raw data piped out via WebUSB successfully");
-
-      event.source.postMessage({
-        type: "PRINT_SUCCESS",
-        tag: event.data.tag
-      }, event.origin);
+      event.source.postMessage({ type: "PRINT_SUCCESS", tag: event.data.tag }, event.origin);
       return;
     }
 
-    // Simulation mode fallback if no printer is connected yet
+    // Fallback: Simulation Mode
     logToScreen("🖥️ Simulation Mode active: Print job logged but not sent to physical hardware");
-    
-    event.source.postMessage({
-      type: "PRINT_SUCCESS",
-      tag: event.data.tag + " (Simulated)"
-    }, event.origin);
+    event.source.postMessage({ type: "PRINT_SUCCESS", tag: event.data.tag + " (Simulated)" }, event.origin);
 
   } catch (err) {
-    logToScreen("❌ Print processing failure: " + err.message, true);
-    
-    event.source.postMessage({
-      type: "PRINT_ERROR",
-      error: err.message
-    }, event.origin);
+    logToScreen(`❌ Print processing failure: ${err.message}`, true);
+    event.source.postMessage({ type: "PRINT_ERROR", error: err.message }, event.origin);
   }
 });
 </script>
