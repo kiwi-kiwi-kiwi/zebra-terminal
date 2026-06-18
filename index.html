@@ -246,7 +246,7 @@ window.addEventListener('message', async (event) => {
   try {
     // --- ZPL INTERCEPTION LOGIC ---
     let finalZpl = event.data.zpl;
-    const printWeight = currentWeight !== null ? currentWeight : "ERR"; // Fallback if scale is blank
+    const printWeight = currentWeight !== null ? currentWeight : "--"; // Fallback if scale is blank
     
     if (finalZpl.includes("{{WEIGHT}}")) {
       finalZpl = finalZpl.replace("{{WEIGHT}}", printWeight);
