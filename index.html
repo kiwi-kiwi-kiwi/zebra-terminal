@@ -46,31 +46,6 @@
       color: #666; 
       font-size: 14px; 
     }
-    .scale-container {
-      background: #f8f9fa; 
-      padding: 15px; 
-      border-radius: 6px; 
-      margin: 15px 0; 
-      border: 1px solid #ddd;
-    }
-    .scale-container h3 {
-      margin: 0; 
-      color: #555;
-    }
-    #weightDisplay { 
-      font-size: 32px; 
-      font-weight: bold; 
-      color: #6f42c1; 
-    }
-    #simWeightBtn {
-      background: #555; 
-      padding: 5px 10px; 
-      font-size: 12px; 
-      margin-top: 10px;
-    }
-    #simWeightBtn:hover {
-      background: #444;
-    }
     .log-header {
       text-align: left; 
       margin-bottom: 5px; 
@@ -99,17 +74,11 @@
 <body>
 
 <div class="box">
-  <h2>Zebra Print & Scale Terminal</h2>
+  <h2>Zebra Print Terminal</h2>
   <p>Keep this tab open in the background to handle hardware integrations from your app.</p>
 
   <button id="connectBtn">🔌 Connect Physical Zebra Printer</button>
   <p id="status">Status: Disconnected (Running in Simulation Mode 🖥️)</p>
-  
-  <div class="scale-container">
-    <h3>Live Weight</h3>
-    <div id="weightDisplay">-- <small style="font-size: 16px;">kg</small></div>
-    <button id="simWeightBtn">Simulate Random Weight</button>
-  </div>
   
   <h4 class="log-header">Activity Log:</h4>
   <div id="logBox" class="log-box">
@@ -126,7 +95,6 @@ const ALLOWED_ORIGIN = "*"; // Replace with your Google Apps Script URL
 // Hardware State
 let zebraDevice = null;
 let browserPrinter = null;
-let currentWeight = null; // Starts as null!
 
 // OS Environment Checks
 const isWindows = navigator.userAgent.includes("Windows");
@@ -134,8 +102,6 @@ const isChromeOS = navigator.userAgent.includes("CrOS");
 
 // DOM Elements
 const els = {
-  weightDisplay: document.getElementById('weightDisplay'),
-  simWeightBtn: document.getElementById('simWeightBtn'),
   connectBtn: document.getElementById('connectBtn'),
   status: document.getElementById('status'),
   logBox: document.getElementById('logBox')
@@ -154,22 +120,6 @@ function logToScreen(message, isAlert = false) {
 
   els.logBox.appendChild(entry);
   els.logBox.scrollTop = els.logBox.scrollHeight;
-}
-
-// ============================================================================
-// HARDWARE: SCALE LOGIC
-// ============================================================================
-async function getWeightFromScale() {
-  logToScreen("⚖️ Requesting weight from scale...");
-  
-  // SIMULATION: Wait 500ms to mimic hardware latency
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // Update our global variable
-  currentWeight = (Math.random() * 4.5 + 0.5).toFixed(3);
-  
-  logToScreen(`✅ Scale updated. Current weight: ${currentWeight} kg`);
-  els.weightDisplay.innerHTML = `${currentWeight} <small style="font-size: 16px;">kg</small>`;
 }
 
 // ============================================================================
@@ -227,7 +177,6 @@ async function connectPrinter() {
 // ============================================================================
 // EVENT LISTENERS (Cross-Window Communication)
 // ============================================================================
-els.simWeightBtn.addEventListener('click', getWeightFromScale);
 els.connectBtn.addEventListener('click', connectPrinter);
 
 window.addEventListener('message', async (event) => {
@@ -239,20 +188,11 @@ window.addEventListener('message', async (event) => {
   // Helper to format the payload
   const buildSuccessPayload = () => ({
     type: "PRINT_SUCCESS",
-    tag: event.data.tag,
-    weight: currentWeight !== null ? parseFloat(currentWeight) : NaN
+    tag: event.data.tag
   });
 
   try {
-    // --- ZPL INTERCEPTION LOGIC ---
-    let finalZpl = event.data.zpl;
-    const printWeight = currentWeight !== null ? currentWeight : "--"; // Fallback if scale is blank
-    
-    if (finalZpl.includes("{{WEIGHT}}")) {
-      finalZpl = finalZpl.replace("{{WEIGHT}}", printWeight);
-      logToScreen(`⚖️ Injected weight (${printWeight} kg) into ZPL command`);
-    }
-    // -----------------------------------
+    const finalZpl = event.data.zpl;
 
     // 1. Windows Browser Print
     if (browserPrinter) {
@@ -276,10 +216,10 @@ window.addEventListener('message', async (event) => {
     }
 
     // 3. Fallback: Simulation Mode
-    logToScreen("🖥️ Simulation Mode: Print logged, returning current weight state.");
+    logToScreen("🖥️ Simulation Mode: Print logged successfully.");
     
     const simPayload = buildSuccessPayload();
-    simPayload.tag = simPayload.tag + " (Simulated)"; // Restored your simulation flag
+    simPayload.tag = simPayload.tag + " (Simulated)";
     
     event.source.postMessage(simPayload, event.origin);
 
