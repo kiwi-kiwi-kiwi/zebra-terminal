@@ -17,26 +17,28 @@
     }
     .box { 
       border: 1px solid #e2e8f0; 
-      padding: 40px; 
+      padding: 50px; 
       background: white; 
       border-radius: 12px; 
       box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); 
       width: 100%;
-      max-width: 500px; 
+      max-width: 750px; /* Increased from 500px */
       text-align: center;
+      margin-top: 2vh;
     }
     h2 {
       margin-top: 0;
       color: #0f172a;
+      font-size: 28px;
     }
     p.subtitle {
       color: #64748b;
-      font-size: 14px;
-      margin-bottom: 24px;
+      font-size: 16px;
+      margin-bottom: 30px;
     }
     button { 
-      padding: 12px 24px; 
-      font-size: 16px; 
+      padding: 16px 24px; /* Made the button chunkier */
+      font-size: 18px; /* Larger text */
       background: #2563eb; 
       color: white; 
       border: none; 
@@ -54,15 +56,15 @@
     }
     #status { 
       font-weight: 600; 
-      margin-top: 16px; 
+      margin-top: 20px; 
       color: #64748b; 
-      font-size: 14px; 
+      font-size: 15px; 
     }
     .log-header {
       text-align: left; 
-      margin: 24px 0 8px 0; 
+      margin: 32px 0 10px 0; 
       color: #475569;
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -72,9 +74,9 @@
       background: #f1f5f9; 
       color: #334155; 
       font-family: "ui-monospace", "SFMono-Regular", Menlo, Monaco, Consolas, monospace; 
-      padding: 16px; 
+      padding: 20px; 
       border-radius: 8px; 
-      height: 220px; 
+      height: 350px; /* Increased from 220px to show more lines */
       overflow-y: auto; 
       border: 1px solid #cbd5e1; 
     }
@@ -82,7 +84,7 @@
       margin-bottom: 12px; 
       border-bottom: 1px solid #e2e8f0; 
       padding-bottom: 12px; 
-      font-size: 13px; 
+      font-size: 14px; 
       line-height: 1.5;
     }
     .log-entry:last-child {
@@ -100,13 +102,13 @@
     }
     .log-action {
       display: block;
-      margin-top: 6px;
-      padding: 8px;
+      margin-top: 8px;
+      padding: 10px;
       background: #fee2e2;
       border-radius: 4px;
       color: #991b1b;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 12px;
+      font-size: 13px;
     }
   </style>
 </head>
