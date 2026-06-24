@@ -7,67 +7,106 @@
 
   <style>
     body { 
-      font-family: sans-serif; 
-      padding: 30px; 
-      text-align: center; 
-      background: #f4f6f9; 
-      color: #333; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+      padding: 40px 20px; 
+      display: flex;
+      justify-content: center;
+      background: #f8fafc; 
+      color: #334155; 
+      margin: 0;
     }
     .box { 
-      border: 2px dashed #6f42c1; 
-      padding: 30px; 
+      border: 1px solid #e2e8f0; 
+      padding: 40px; 
       background: white; 
-      display: inline-block; 
-      border-radius: 8px; 
-      margin-top: 20px; 
-      box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-      width: 450px; 
+      border-radius: 12px; 
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); 
+      width: 100%;
+      max-width: 500px; 
+      text-align: center;
+    }
+    h2 {
+      margin-top: 0;
+      color: #0f172a;
+    }
+    p.subtitle {
+      color: #64748b;
+      font-size: 14px;
+      margin-bottom: 24px;
     }
     button { 
       padding: 12px 24px; 
       font-size: 16px; 
-      background: #6f42c1; 
+      background: #2563eb; 
       color: white; 
       border: none; 
-      border-radius: 4px; 
+      border-radius: 6px; 
       cursor: pointer; 
-      font-weight: bold; 
-      transition: background 0.2s;
+      font-weight: 600; 
+      transition: background 0.2s, transform 0.1s;
+      width: 100%;
     }
     button:hover {
-      background: #5a32a3;
+      background: #1d4ed8;
     }
     button:active { 
-      background: #462680; 
+      transform: scale(0.98);
     }
     #status { 
-      font-weight: bold; 
-      margin-top: 15px; 
-      color: #666; 
+      font-weight: 600; 
+      margin-top: 16px; 
+      color: #64748b; 
       font-size: 14px; 
     }
     .log-header {
       text-align: left; 
-      margin-bottom: 5px; 
-      color: #555;
+      margin: 24px 0 8px 0; 
+      color: #475569;
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     .log-box { 
-      margin-top: 20px; 
       text-align: left; 
-      background: #222; 
-      color: #00ff00; 
-      font-family: monospace; 
-      padding: 15px; 
-      border-radius: 6px; 
-      height: 180px; 
+      background: #f1f5f9; 
+      color: #334155; 
+      font-family: "ui-monospace", "SFMono-Regular", Menlo, Monaco, Consolas, monospace; 
+      padding: 16px; 
+      border-radius: 8px; 
+      height: 220px; 
       overflow-y: auto; 
-      box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); 
+      border: 1px solid #cbd5e1; 
     }
     .log-entry { 
-      margin-bottom: 8px; 
-      border-bottom: 1px solid #333; 
-      padding-bottom: 4px; 
-      font-size: 12px; 
+      margin-bottom: 12px; 
+      border-bottom: 1px solid #e2e8f0; 
+      padding-bottom: 12px; 
+      font-size: 13px; 
+      line-height: 1.5;
+    }
+    .log-entry:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    .log-time {
+      color: #94a3b8;
+      margin-right: 8px;
+    }
+    .log-error {
+      color: #b91c1c;
+      font-weight: 500;
+    }
+    .log-action {
+      display: block;
+      margin-top: 6px;
+      padding: 8px;
+      background: #fee2e2;
+      border-radius: 4px;
+      color: #991b1b;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 12px;
     }
   </style>
 </head>
@@ -75,14 +114,14 @@
 
 <div class="box">
   <h2>Zebra Print Terminal</h2>
-  <p>Keep this tab open in the background to handle hardware integrations from your app.</p>
+  <p class="subtitle">Keep this tab open in the background to handle hardware integrations from your app.</p>
 
-  <button id="connectBtn">🔌 Connect Physical Zebra Printer</button>
-  <p id="status">Status: Disconnected (Running in Simulation Mode 🖥️)</p>
+  <button id="connectBtn">🔌 Connect Physical Printer</button>
+  <p id="status">Status: Disconnected (Simulation Mode)</p>
   
-  <h4 class="log-header">Activity Log:</h4>
+  <h4 class="log-header">Activity Log</h4>
   <div id="logBox" class="log-box">
-    <div class="log-entry" style="color: #888;">> System ready. Awaiting data from scanner app...</div>
+    <div class="log-entry" style="color: #64748b;">> System ready. Awaiting data from scanner app...</div>
   </div>
 </div>
 
@@ -110,14 +149,31 @@ const els = {
 // ============================================================================
 // UTILITIES
 // ============================================================================
-function logToScreen(message, isAlert = false) {
+/**
+ * Logs messages to the UI. 
+ * @param {string} message - The main log message.
+ * @param {string} type - 'info', 'success', or 'error'.
+ * @param {string} actionAdvice - Specific troubleshooting instructions for errors.
+ */
+function logToScreen(message, type = 'info', actionAdvice = null) {
   const entry = document.createElement('div');
   entry.className = 'log-entry';
-  if (isAlert) entry.style.color = '#ffcc00';
+  
+  if (type === 'error') {
+    entry.classList.add('log-error');
+  } else if (type === 'success') {
+    entry.style.color = '#15803d';
+  }
 
-  const timestamp = new Date().toLocaleTimeString();
-  entry.innerHTML = `[${timestamp}] ${message}`;
+  const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  
+  let htmlContent = `<span class="log-time">[${timestamp}]</span> ${message}`;
+  
+  if (type === 'error' && actionAdvice) {
+    htmlContent += `<span class="log-action">💡 <strong>Troubleshooting:</strong> ${actionAdvice}</span>`;
+  }
 
+  entry.innerHTML = htmlContent;
   els.logBox.appendChild(entry);
   els.logBox.scrollTop = els.logBox.scrollHeight;
 }
@@ -127,33 +183,35 @@ function logToScreen(message, isAlert = false) {
 // ============================================================================
 async function connectPrinter() {
   try {
-    logToScreen("🔍 Detecting platform...");
+    logToScreen("🔍 Detecting platform...", "info");
     zebraDevice = null;
     browserPrinter = null;
 
     // PATH 1: Windows (Zebra Browser Print Local App)
     if (isWindows) {
-      logToScreen("🪟 Windows detected → aiming for Browser Print app");
+      logToScreen("🪟 Windows detected → Checking for Browser Print app");
       if (window.BrowserPrint) {
         window.BrowserPrint.getDefaultDevice("printer", function(device) {
           if (!device) {
-            logToScreen("❌ Zebra desktop utility running, but no printer selected.", true);
+            logToScreen("❌ Zebra utility running, but no printer selected.", "error", "Open the Zebra Browser Print app in your system tray, right-click, and ensure a default printer is selected.");
             return;
           }
           browserPrinter = device;
           els.status.innerText = "Status: Windows (Browser Print Connected)";
-          els.status.style.color = "green";
-          logToScreen("🖨️ Browser Print local client linked and ready");
+          els.status.style.color = "#15803d";
+          logToScreen("🖨️ Browser Print local client linked and ready", "success");
         }, function(err) {
-          logToScreen("❌ Failed to reach local Zebra service: " + err, true);
+          logToScreen(`❌ Failed to reach local Zebra service: ${err}`, "error", "Ensure the Zebra Browser Print application is installed, running in the background, and that you accepted the browser security prompt.");
         });
+      } else {
+        logToScreen("❌ BrowserPrint library failed to load.", "error", "Check your internet connection or script sources.");
       }
       return;
     }
 
     // PATH 2: Chromebook / Direct WebUSB
     if (isChromeOS || navigator.usb) {
-      logToScreen("💻 ChromeOS / WebUSB mode initiated");
+      logToScreen("💻 WebUSB mode initiated");
       zebraDevice = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x0A5F }] });
       logToScreen(`📦 Selected: ${zebraDevice.productName || "Zebra Printer"}`);
 
@@ -162,14 +220,22 @@ async function connectPrinter() {
       await zebraDevice.claimInterface(0);
 
       els.status.innerText = "Status: WebUSB Connected";
-      els.status.style.color = "green";
-      logToScreen("🔌 WebUSB direct connection established successfully");
+      els.status.style.color = "#15803d";
+      logToScreen("🔌 WebUSB direct connection established successfully", "success");
       return;
     }
 
-    logToScreen("⚠️ Environment not supported for USB direct connections.", true);
+    logToScreen("⚠️ Environment not supported for USB direct connections.", "error", "Try using Google Chrome or Edge on a device that supports WebUSB, or use Windows with Zebra Browser Print.");
+  
   } catch (error) {
-    logToScreen(`❌ Connection dropped: ${error.message}`, true);
+    let advice = "Check your USB cable. Ensure the printer is powered on.";
+    if (error.message.includes("No device selected")) {
+      advice = "You cancelled the selection prompt. Click connect and choose a printer to continue.";
+    } else if (error.message.includes("access denied")) {
+      advice = "Another tab or application might be using the printer. Close other software and try again.";
+    }
+
+    logToScreen(`❌ Connection dropped: ${error.message}`, "error", advice);
     zebraDevice = null;
   }
 }
@@ -185,7 +251,6 @@ window.addEventListener('message', async (event) => {
 
   logToScreen(`📩 Print job intercepted: ${event.data.tag}`);
 
-  // Helper to format the payload
   const buildSuccessPayload = () => ({
     type: "PRINT_SUCCESS",
     tag: event.data.tag
@@ -197,10 +262,10 @@ window.addEventListener('message', async (event) => {
     // 1. Windows Browser Print
     if (browserPrinter) {
       browserPrinter.send(finalZpl, function() {
-        logToScreen("🖨️ Job pushed via local Browser Print client");
+        logToScreen("🖨️ Job pushed via local Browser Print client", "success");
         event.source.postMessage(buildSuccessPayload(), event.origin);
       }, function(err) {
-        logToScreen("❌ Browser Print error: " + err, true);
+        logToScreen(`❌ Browser Print error: ${err}`, "error", "Check if the printer is out of paper, paused, or turned off.");
         event.source.postMessage({ type: "PRINT_ERROR", error: err }, event.origin);
       });
       return;
@@ -210,21 +275,21 @@ window.addEventListener('message', async (event) => {
     if (zebraDevice) {
       const data = new TextEncoder().encode(finalZpl);
       await zebraDevice.transferOut(1, data); 
-      logToScreen("🖨️ Raw data piped out via WebUSB successfully");
+      logToScreen("🖨️ Raw data piped out via WebUSB successfully", "success");
       event.source.postMessage(buildSuccessPayload(), event.origin);
       return;
     }
 
     // 3. Fallback: Simulation Mode
-    logToScreen("🖥️ Simulation Mode: Print logged successfully.");
+    logToScreen("🖥️ Simulation Mode: Print logged successfully.", "info");
     
     const simPayload = buildSuccessPayload();
-    simPayload.tag = simPayload.tag + " (Simulated)"; // Restored your simulation flag
+    simPayload.tag = simPayload.tag + " (Simulated)"; 
     
     event.source.postMessage(simPayload, event.origin);
 
   } catch (err) {
-    logToScreen(`❌ Print processing failure: ${err.message}`, true);
+    logToScreen(`❌ Print processing failure: ${err.message}`, "error", "The connection to the printer was likely lost. Try clicking 'Connect Physical Printer' again.");
     event.source.postMessage({ type: "PRINT_ERROR", error: err.message }, event.origin);
   }
 });
