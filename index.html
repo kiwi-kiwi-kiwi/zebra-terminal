@@ -295,6 +295,18 @@ window.addEventListener('message', async (event) => {
     event.source.postMessage({ type: "PRINT_ERROR", error: err.message }, event.origin);
   }
 });
+  
+// ============================================================================
+// HANDSHAKE INITIALIZATION
+// ============================================================================
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.opener) {
+    // Ping the parent window to let it know the terminal is alive
+    window.opener.postMessage({ type: 'TERMINAL_READY' }, ALLOWED_ORIGIN);
+    logToScreen("✅ Handshake sent to parent application.", "success");
+  }
+});
+  
 </script>
 
 </body>
